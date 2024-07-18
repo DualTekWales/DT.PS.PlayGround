@@ -1,26 +1,20 @@
-function Get-Elevation {
-    if ($PSVersionTable.PSEdition -eq "Desktop" -or $PSVersionTable.Platform -eq "Win32NT" -or $PSVersionTable.PSVersion.Major -le 5) {
-        [System.Security.Principal.WindowsPrincipal]$currentPrincipal = New-Object System.Security.Principal.WindowsPrincipal(
-            [System.Security.Principal.WindowsIdentity]::GetCurrent()
-        )
-
-        [System.Security.Principal.WindowsBuiltInRole]$administratorsRole = [System.Security.Principal.WindowsBuiltInRole]::Administrator
-
-        if($currentPrincipal.IsInRole($administratorsRole)) {
-            return $true
-        }
-        else {
-            return $false
-        }
-    }
-    
-    if ($PSVersionTable.Platform -eq "Unix") {
-        if ($(whoami) -eq "root") {
-            return $true
-        }
-        else {
-            return $false
-        }
-    }
+﻿function Get-Elevation {
+<#
+    .NOTES
+		Created:    28/03/2022 12:22
+		Version:	1.0.1
+		Author:     Mark White
+		Updated:    
+		Version:    1.0.1 - Initial script release
+		
+#>
+	#Admin Privleges Check
+	$AdminConsole = [bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544")
+	
+	if ($AdminConsole -like "False*")
+	{
+		Write-Warning $ElevationWarning
+		Write-Host ' '
+		Break
+	}
 }
-
