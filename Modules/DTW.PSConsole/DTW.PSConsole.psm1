@@ -1,733 +1,820 @@
 ﻿
 #region Functions to check and test
 
-function Get-CurrentDay {
-<#
-.SYNOPSIS
-	Determines the current day 
-.DESCRIPTION
-	This PowerShell script determines and speaks the current day by text-to-speech (TTS).
-.EXAMPLE
-	PS> ./check-day
-	✔️ It's Sunday.
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	try
-	{
-		[system.threading.thread]::currentthread.currentculture = [system.globalization.cultureinfo]"en-US"
-		$Weekday = (Get-Date -format "dddd")
-		#Start-SpeakingEnglish "It's $Weekday."
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+function New-SystemInfoReport {
+# This script grabs system information using WMI and outputs it to a HTML report
+# File paths
+$reportPath = $PSScriptRoot + "\report.html"
+$date = Get-Date
+# Computer info
+$ram = [math]::Round((Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty TotalVisibleMemorySize)/1MB, 2)
+$free = [math]::Round((Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty FreePhysicalMemory)/1MB, 2)
+$name = Get-WmiObject Win32_ComputerSystem | Select -ExpandProperty Name
+$numProcesses = Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty NumberOfProcesses
+$numUsers = Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty NumberOfUsers
+$boot = Get-WmiObject Win32_OperatingSystem | Select-Object @{Label="LastBootTime"; Expression={$_.ConvertToDateTime($_.LastBootUpTime)}} | Select -ExpandProperty LastBootTime
+$os = Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty Caption
+$arch = Get-WmiObject Win32_OperatingSystem | Select -ExpandProperty OSArchitecture
+$processor = Get-WmiObject Win32_Processor | Select -ExpandProperty Name
+$model = Get-WmiObject win32_ComputerSystemProduct | Select -ExpandProperty Name
+$manufacturer = Get-WmiObject win32_ComputerSystemProduct | Select -ExpandProperty Vendor
 
-function Get-CurrentMonth {
-<#
-.SYNOPSIS
-	Gets the current month name
-.DESCRIPTION
-	This PowerShell script determines and speaks the current month name by text-to-speech (TTS).
-.EXAMPLE
-	PS> ./check-month
-	✔️ It's December.
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	try
-	{
-		[system.threading.thread]::currentthread.currentculture = [system.globalization.cultureinfo]"en-GB"
-		$MonthName = (Get-Date -UFormat %B)
-		Write-Host "It's $MonthName."
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
+# Create computer object and html
+$computerProps = @{
+    'Name'= $name;
+    'Operating System'= $os;
+    'Architecture'= $arch;
+    'Processor'= $processor;
+    'Model Name'=$model;
+    'Manufacturer'=$manufacturer;
+    'Last Boot'= $boot
 }
+$computer = New-Object -TypeName PSObject -Prop $computerProps
+$computerHtml = $computer | ConvertTo-Html -Fragment -PreContent "<h1>Computer Report - $date</h1><h2>System Information</h2>"
 
-function Get-DuskTime {
-<#
-.SYNOPSIS
-	Checks the time of dusk 
-.DESCRIPTION
-	This PowerShell script queries the time of dusk and answers by text-to-speech (TTS).
-.EXAMPLE
-	PS> Get-DuskTime
-	Dusk is in 2 hours at 8 PM.
-.NOTES
-        Created:    04/01/2024
-        Author:     Mark White
-        Version:    0.0.1
-        Updated:    
-        History:    0.0.1 - Initial release
-#>
-	
-	function TimeSpanToString
-	{
-		param ([TimeSpan]$Delta)
-		$Result = ""
-		if ($Delta.Hours -eq 1)
-		{
-			$Result += "1 hour and "
-		}
-		elseif ($Delta.Hours -gt 1)
-		{
-			$Result += "$($Delta.Hours) hours and "
-		}
-		if ($Delta.Minutes -eq 1)
-		{
-			$Result += "1 minute"
-		}
-		else
-		{
-			$Result += "$($Delta.Minutes) minutes"
-		}
-		return $Result
-	}
-	
-	try
-	{
-		[system.threading.thread]::currentThread.currentCulture = [system.globalization.cultureInfo]"en-US"
-		$String = (Invoke-WebRequest http://wttr.in/?format="%d" -UserAgent "curl" -useBasicParsing).Content
-		$Hour, $Minute, $Second = $String -split ':'
-		$Dusk = Get-Date -Hour $Hour -Minute $Minute -Second $Second
-		$Now = [DateTime]::Now
-		if ($Now -lt $Dusk)
-		{
-			$TimeSpan = TimeSpanToString($Dusk - $Now)
-			$Reply = "Dusk is in $TimeSpan at $($Dusk.ToShortTimeString())."
-		}
-		else
-		{
-			$TimeSpan = TimeSpanToString($Now - $Dusk)
-			$Reply = "Dusk was $TimeSpan ago at $($Dusk.ToShortTimeString())."
-		}
-		Write-Output $Reply
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
+# Create computer object and html
+$perfmonProps = @{
+    'Free Memory (GB)'= $free;
+    'Total Memory (GB)'= $ram;
+    'Process Count'=$numProcesses;
+    'User Count'=$numUsers
 }
+$perfmon = New-Object -TypeName PSObject -Prop $perfmonProps
+$perfmonHtml = $perfmon | ConvertTo-Html -Fragment -PreContent "<h2>Performance Information</h2>"
 
-function Get-PowerDetails {
-<#
-.SYNOPSIS
-	Checks the power status
-.DESCRIPTION
-	This PowerShell script queries the power status and prints it.
-.EXAMPLE
-	PS> ./check-power.ps1
-	⚠️ Battery at 9% · 54 min remaining · power scheme 'HP Optimized' 
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	try
-	{
-		if ($IsLinux)
-		{
-			$reply = "✅ AC powered" # TODO, just guessing :-)
-		}
-		else
-		{
-			Add-Type -Assembly System.Windows.Forms
-			$details = [System.Windows.Forms.SystemInformation]::PowerStatus
-			[int]$percent = 100 * $details.BatteryLifePercent
-			[int]$remaining = $details.BatteryLifeRemaining / 60
-			if ($details.PowerLineStatus -eq "Online")
-			{
-				if ($details.BatteryChargeStatus -eq "NoSystemBattery")
-				{
-					$reply = "✅ AC powered"
-				}
-				elseif ($percent -ge 95)
-				{
-					$reply = "✅ Battery $percent% fully charged"
-				}
-				else
-				{
-					$reply = "✅ Battery charging... ($percent%)"
-				}
-			}
-			else
-			{
-				# must be offline
-				if (($remaining -eq 0) -and ($percent -ge 60))
-				{
-					$reply = "✅ Battery $percent% full"
-				}
-				elseif ($remaining -eq 0)
-				{
-					$reply = "✅ Battery at $percent%"
-				}
-				elseif ($remaining -le 5)
-				{
-					$reply = "⚠️ Battery at $percent% · ONLY $($remaining)min remaining"
-				}
-				elseif ($remaining -le 30)
-				{
-					$reply = "⚠️ Battery at $percent% · only $($remaining)min remaining"
-				}
-				elseif ($percent -lt 10)
-				{
-					$reply = "⚠️ Battery at $percent% · $($remaining)min remaining"
-				}
-				elseif ($percent -ge 60)
-				{
-					$reply = "✅ Battery $percent% full · $($remaining)min remaining"
-				}
-				else
-				{
-					$reply = "✅ Battery at $percent% · $($remaining)min remaining"
-				}
-			}
-			$powerScheme = (powercfg /getactivescheme)
-			$powerScheme = $powerScheme -Replace "^(.*)  \(", ""
-			$powerScheme = $powerScheme -Replace "\)$", ""
-			$reply += " · power scheme '$powerScheme'"
-		}
-		Write-Output $reply
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+# List network stats
+$ips = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPAddress -ne $null } | Select-Object DNSHostName,Description,@{Label="IP Address"; Expression={($_.IPAddress[0])}},@{Label="Default Gateway"; Expression={($_.DefaultIPGateway[0])}},MACAddress
+$ipsHtml = $ips | ConvertTo-Html -Fragment -PreContent "<h2>Network Information</h2>"
 
-function Get-RAMDetails {
-<#
-.SYNOPSIS
-	Checks the RAM
-.DESCRIPTION
-	This PowerShell script queries the status of the installed RAM memory modules and prints it.
-.EXAMPLE
-	PS> ./check-ram.ps1
-	✅ 16GB DDR4 RAM @ 3200MHz by Micron (in CPU0/CPU0-DIMM3 @ 1.2V)
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	function GetRAMType
-	{
-		param ([int]$Type)
-		switch ($Type)
-		{
-			2 { return "DRAM" }
-			5 { return "EDO RAM" }
-			6 { return "EDRAM" }
-			7 { return "VRAM" }
-			8 { return "SRAM" }
-			10 { return "ROM" }
-			11 { return "Flash" }
-			12 { return "EEPROM" }
-			13 { return "FEPROM" }
-			14 { return "EPROM" }
-			15 { return "CDRAM" }
-			16 { return "3DRAM" }
-			17 { return "SDRAM" }
-			18 { return "SGRAM" }
-			19 { return "RDRAM" }
-			20 { return "DDR RAM" }
-			21 { return "DDR2 RAM" }
-			22 { return "DDR2 FB-DIMM" }
-			24 { return "DDR3 RAM" }
-			26 { return "DDR4 RAM" }
-			27 { return "DDR5 RAM" }
-			28 { return "DDR6 RAM" }
-			29 { return "DDR7 RAM" }
-			default { return "RAM" }
-		}
-	}
-	
-	function Bytes2String
-	{
-		param ([int64]$Bytes)
-		if ($Bytes -lt 1024) { return "$Bytes bytes" }
-		$Bytes /= 1024
-		if ($Bytes -lt 1024) { return "$($Bytes)KB" }
-		$Bytes /= 1024
-		if ($Bytes -lt 1024) { return "$($Bytes)MB" }
-		$Bytes /= 1024
-		if ($Bytes -lt 1024) { return "$($Bytes)GB" }
-		$Bytes /= 1024
-		if ($Bytes -lt 1024) { return "$($Bytes)TB" }
-		$Bytes /= 1024
-		if ($Bytes -lt 1024) { return "$($Bytes)PB" }
-		$Bytes /= 1024
-		if ($Bytes -lt 1024) { return "$($Bytes)EB" }
-	}
-	
-	try
-	{
-		if ($IsLinux)
-		{
-			# TODO
-		}
-		else
-		{
-			$Banks = Get-WmiObject -Class Win32_PhysicalMemory
-			foreach ($Bank in $Banks)
-			{
-				$Capacity = Bytes2String($Bank.Capacity)
-				$Type = GetRAMType $Bank.SMBIOSMemoryType
-				$Speed = $Bank.Speed
-				[float]$Voltage = $Bank.ConfiguredVoltage / 1000.0
-				$Manufacturer = $Bank.Manufacturer
-				$Location = "$($Bank.BankLabel)/$($Bank.DeviceLocator)"
-				Write-Host "✅ $Capacity $Type @ $($Speed)MHz by $Manufacturer (in $Location @ $($Voltage)V)"
-			}
-		}
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+# List drive stats
+$disks = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" | Select-Object @{Label="Drive Letter"; Expression={$_.DeviceID}},@{Label="Name"; Expression={$_.VolumeName}},@{Label="Free (GB)"; Expression={“{0:N2}” -f ($_.FreeSpace / 1GB)}},@{Label="Total (GB)"; Expression={“{0:N2}” -f ($_.Size / 1GB)}}
+$disksHtml = $disks | ConvertTo-Html -Fragment -PreContent "<h2>Drives</h2>"
 
-function Get-SystemUptime {
-<#
-.SYNOPSIS
-	Checks the uptime 
-.DESCRIPTION
-	This PowerShell script queries the computer's uptime (time between now and last boot up time) and prints it.
-.EXAMPLE
-	PS> ./check-uptime.ps1
-	✅ Up for 2 days, 20 hours, 10 minutes
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	function TimeSpan2String([TimeSpan]$uptime)
-	{
-		[int]$days = $uptime.Days
-		[int]$hours = $days * 24 + $uptime.Hours
-		if ($days -gt 2)
-		{
-			return "$days days"
-		}
-		elseif ($hours -gt 1)
-		{
-			return "$hours hours"
-		}
-		else
-		{
-			return "$($uptime.Minutes)min"
-		}
-	}
-	
-	try
-	{
-		if ($IsLinux)
-		{
-			$uptime = (Get-Uptime)
-			Write-Host "✅ Up for $(TimeSpan2String $uptime)"
-		}
-		else
-		{
-			[system.threading.thread]::currentthread.currentculture = [system.globalization.cultureinfo]"en-US"
-			$lastBootTime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
-			$uptime = New-TimeSpan -Start $lastBootTime -End (Get-Date)
-			Write-Host "✅ Up for $(TimeSpan2String $uptime) since $($lastBootTime.ToShortDateString())"
-		}
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+# Select all processes that are over 50 MB
+$processes = Get-WmiObject Win32_Process | Where-Object {$_.WorkingSetSize -gt 52428800} | Sort-Object WorkingSetSize -Descending | Select-Object Name,ProcessId,@{Label="Memory Usage (MB)"; Expression={“{0:N2}” -f ($_.WorkingSetSize / 1MB)}}
+$processesHtml = $processes | ConvertTo-Html -Fragment -PreContent "<h2>Runnning Processes over 50MB</h2>"
 
-function Get-TimetoNewYear {
-<#
-.SYNOPSIS
-	Checks the time until New Year
-.DESCRIPTION
-	This PowerShell script checks the time until New Year and replies by text-to-speech (TTS).
-.EXAMPLE
-	PS> Get-TimetoNewYear
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	try
-	{
-		$Now = [DateTime]::Now
-		$NewYear = [Datetime]("12/31/" + $Now.Year)
-		$Days = ($NewYear - $Now).Days + 1
-		if ($Days -gt 1)
-		{
-			#Start-SpeakingEnglish "New Year is in $Days days."
-		}
-		elseif ($Days -eq 1)
-		{
-			#Start-SpeakingEnglish "New Year is tomorrow."
-		}
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+# Select all running services
+$services= Get-WmiObject Win32_Service | Where-Object {$_.State -eq "Running"} | Sort-Object DisplayName | Select-Object DisplayName,ProcessId,StartMode
+$servicesHtml = $services | ConvertTo-Html -Fragment -PreContent "<h2>Running Services</h2>"
 
-function Get-WeekNumber {
-<#
-.SYNOPSIS
-	Determines the week number 
-.DESCRIPTION
-	This PowerShell script determines and speaks the current week number by text-to-speech (TTS).
-.EXAMPLE
-	PS> Get-WeekNumber
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	try
-	{
-		$WeekNo = (Get-Date -UFormat %V)
-		#Start-SpeakingEnglish "It's week #$WeekNo."
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+# Select all start up programs
+$startup= Get-WmiObject Win32_startupCommand | Sort-Object Caption | Select-Object Caption,User,Command
+$startupHtml = $startup | ConvertTo-Html -Fragment -PreContent "<h2>Startup Commands</h2>"
 
-function Get-WindConditions {
-<#
-.SYNOPSIS
-	Checks the wind conditions
-.DESCRIPTION
-	This PowerShell script determines the current wind conditions and replies by text-to-speech (TTS).
-.PARAMETER location
-	Specifies the location to use (determined automatically per default)
-.EXAMPLE
-	PS> Get-WindConditions
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	param ([string]$location = "") # empty means determine automatically
-	
-	try
-	{
-		$Weather = (Invoke-WebRequest http://wttr.in/${location}?format=j1 -userAgent "curl" -useBasicParsing).Content | ConvertFrom-Json
-		$WindSpeed = $Weather.current_condition.windspeedKmph
-		$WindDir = $Weather.current_condition.winddir16Point
-		$Area = $Weather.nearest_area.areaName.value
-		$Region = $Weather.nearest_area.region.value
-		
-		#Start-SpeakingEnglish "$($WindSpeed)km/h wind from $WindDir at $Area ($Region)."
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+# Create HTML file
+$head = @"
+    <title>Computer Report</title>
+    <style>
+        body {
+            background-color: #282A36;
+            font-family: sans-serif;
+        }
 
-function Get-PingLatency {
-<#
-.SYNOPSIS
-	Checks the ping latency 
-.DESCRIPTION
-	This PowerShell script measures the ping roundtrip times from the local computer to other computers (10 Internet servers by default).
-.PARAMETER hosts
-	Specifies the hosts to check, seperated by commata (default is: amazon.com,bing.com,cnn.com,dropbox.com,github.com,google.com,live.com,meta.com,x.com,youtube.com)
-.EXAMPLE
-	PS> Get-PingLatency
-	✅ Online with 18ms latency average (13ms...109ms, 0/10 ping loss)
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	param ([string]$hosts = "bing.com,cnn.com,dropbox.com,github.com,google.com,ibm.com,live.com,meta.com,x.com,youtube.com")
-	
-	try
-	{
-		$hostsArray = $hosts.Split(",")
-		$parallelTasks = $hostsArray | ForEach-Object {
-			(New-Object Net.NetworkInformation.Ping).SendPingAsync($_, 750)
-		}
-		[int]$min = 9999999
-		[int]$max = [int]$avg = [int]$success = 0
-		[int]$total = $hostsArray.Count
-		[Threading.Tasks.Task]::WaitAll($parallelTasks)
-		foreach ($ping in $parallelTasks.Result)
-		{
-			if ($ping.Status -ne "Success") { continue }
-			$success++
-			[int]$latency = $ping.RoundtripTime
-			$avg += $latency
-			if ($latency -lt $min) { $min = $latency }
-			if ($latency -gt $max) { $max = $latency }
-		}
-		[int]$loss = $total - $success
-		if ($success -ne 0)
-		{
-			$avg /= $success
-			Write-Host "✅ Online with $($avg)ms latency average ($($min)ms...$($max)ms, $loss/$total ping loss)"
-		}
-		else
-		{
-			Write-Host "⚠️ Offline ($loss/$total ping loss)"
-		}
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
-}
+        h1 {
+            color: #FF7575;
+        }
 
-function Get-CurrentMoonPhase {
-<#
-.SYNOPSIS
-	Writes the moon phase
-.DESCRIPTION
-	This PowerShell script writes the current moon phase to the console.
-.EXAMPLE
-	PS> Get-CurrentMoonPhase
-.NOTES
-    Created:    04/01/2024
-	Author:     Mark White
-    Version:    0.0.1
-    Updated:    
-    History:    0.0.1 - Initial release
-#>
-	
-	try
-	{
-		(Invoke-WebRequest http://wttr.in/Moon -userAgent "curl" -useBasicParsing).Content
-	}
-	catch
-	{
-		"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
-	}
+        h2 {
+            color: #E56969;
+        }
+
+        table {
+            background-color: #363949;
+            border-collapse: collapse;
+        }
+
+        td {
+            border: 2px solid #282A36;
+            background-color: #363949;
+            color: #FF7575;
+            padding: 5px;
+        }
+
+        th {
+            border: 2px solid #282A36;
+            background-color: #363949;
+            color: #FF7575;
+            text-align: left;
+            padding: 5px;
+        }
+    </style>
+"@
+# Convert everything to HTML and output to file
+ConvertTo-Html -Head $head -Body "$computerHtml $perfmonHtml $ipsHtml $disksHtml $processesHtml $servicesHtml $startupHtml" | Out-File $reportPath
 }
 
 #endregion Functions to check and test
 
-# Check if console was started as admin
-if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
-    $AdminTitle = " [God Mode]"
-    $IsAdmin = $true
-}
+# Below is used for username entries in functions below
+$dom = $env:userdomain
+$usr = $env:username
+$dn = ([adsi]"WinNT://$dom/$usr,user").fullname
 
 function Out-VerboseTee {
-    [CmdletBinding()]
-    [alias("tv", "Tee-Verbose")]
-    Param(
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [object]$Value,
-        [Parameter(Position = 0, Mandatory)]
-        [string]$Path,
-        [System.Text.Encoding]$Encoding,
-        [switch]$Append
-    )
-    Begin {
-        #turn on verbose pipeline since if you are running this command you intend for it to be on
-        $VerbosePreference = "continue"
-    }
-    Process {
-        #only run if Verbose is turned on
-        if ($VerbosePreference -eq "continue") {
-            $Value | Out-String | Write-Verbose
-            [void]$PSBoundParameters.Remove("Append")
-            if ($Append) {
-                Add-Content @PSBoundParameters
-            }
-            else {
-                Set-Content @PSBoundParameters
-            }
+[CmdletBinding()]
+[alias("tv", "Tee-Verbose")]
+Param(
+    [Parameter(Mandatory, ValueFromPipeline)]
+    [object]$Value,
+    [Parameter(Position = 0, Mandatory)]
+    [string]$Path,
+    [System.Text.Encoding]$Encoding,
+    [switch]$Append
+)
+Begin {
+    #turn on verbose pipeline since if you are running this command you intend for it to be on
+    $VerbosePreference = "continue"
+}
+Process {
+    #only run if Verbose is turned on
+    if ($VerbosePreference -eq "continue") {
+        $Value | Out-String | Write-Verbose
+        [void]$PSBoundParameters.Remove("Append")
+        if ($Append) {
+            Add-Content @PSBoundParameters
+        }
+        else {
+            Set-Content @PSBoundParameters
         }
     }
-    End {
-        $VerbosePreference = "SilentlyContinue"
-    }
+}
+End {
+    $VerbosePreference = "SilentlyContinue"
+}
 } #close Out-VerboseTee
 
-# Get IPv4-Address
-function Get-ConsoleIPv4Address {
-    If ($env:COMPUTERNAME.Equals(("M42449T")))
-	{
-		Get-NetIPAddress -InterfaceAlias 'Ethernet 2' -AddressFamily IPv4
-	}
-    ElseIf ($env:COMPUTERNAME.Equals(($HomePC)))
-	{
-		Get-NetIPAddress -InterfaceAlias 'Ethernet' -AddressFamily IPv4
-	}
-    elseif ($env:COMPUTERNAME.Equals(($HomeLaptop)))
-	{
-		Get-NetIPAddress -InterfaceAlias 'Ethernet 2' -AddressFamily IPv4
-	}
-	
-	#Get-NetIPAddress -InterfaceIndex 10 -InterfaceAlias 'Ethernet' -AddressFamily IPv4
+# Check if console was started as admin
+if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
+$AdminTitle = " [God Mode]"
+$IsAdmin = $true
 }
 
-# PSVersion (e.g. 5.0.10586.494 or 4.0)
-if ($PSVersionTable.PSVersion.Major -gt 6) {
-    $PSConsole_PSVersion = "$($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor).$($PSVersionTable.PSVersion.Patch)"
+# get time till next holiday
+function Get-TimeToHoliday {
+<#
+.SYNOPSIS
+    Checks the time until holiday
+.DESCRIPTION
+    This script checks the time until holiday and replies by text-to-speech (TTS).
+.EXAMPLE
+    PS> Get-TimeToholiday
+.NOTES
+    Created:    26/10/2023
+    Author:     Mark White
+    Version:    0.0.1
+    Updated:    
+    History:    0.0.1 - Initial release
+#>
+try {
+    $Now = Get-Date
+    $holiday = Get-Date -Month 01 -Day 09 -Year 2025
+    $daysUntilholiday = ($holiday - $Now).Days
+
+    $Reply = "$daysUntilholiday days until Bali & Lombock."
+    "$Reply"
+
+}
+catch {
+    "⚠️ Error: $($Error[0]) ($($MyInvocation.MyCommand.Name):$($_.InvocationInfo.ScriptLineNumber))"
+
+}
+}
+
+function Get-ConsoleIPv4Address {
+If ($env:COMPUTERNAME.Equals(("M42449T")))
+{
+    Get-NetIPAddress -InterfaceAlias 'Ethernet 2' -AddressFamily IPv4
+}
+ElseIf ($env:COMPUTERNAME.Equals(($HomePC)))
+{
+    Get-NetIPAddress -InterfaceAlias 'Ethernet' -AddressFamily IPv4
+}
+elseif ($env:COMPUTERNAME.Equals(($HomeLaptop)))
+{
+    Get-NetIPAddress -InterfaceAlias 'Ethernet 2' -AddressFamily IPv4
+}
+
+#Get-NetIPAddress -InterfaceIndex 10 -InterfaceAlias 'Ethernet' -AddressFamily IPv4
+}
+
+function Get-ConsolePSStatus {
+<#
+.SYNOPSIS
+    Check the PowerShell status
+.DESCRIPTION
+    This PowerShell script queries the PowerShell status and prints it.
+.EXAMPLE
+    PS> Get-ConsolePSStatus
+    ✅ PowerShell 5.1.19041.2673 Desktop edition (10 modules, 1458 cmdlets, 172 aliases)
+.NOTES
+    Created:    04/01/2024
+    Author:     Mark White
+    Version:    0.0.1
+    Updated:    
+    History:    0.0.1 - Initial release
+#>
+
+try {
+    $version = $PSVersionTable.PSVersion
+    $edition = $PSVersionTable.PSEdition
+    if ($IsLinux) {
+        "PowerShell $version $edition Edition"
+    } else {
+        "PowerShell $version $edition Edition"
+    }
+
+} catch {
+    "⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
+
+}
+}
+
+function Get-ConsoleComputerInfo {
+<#
+.DESCRIPTION
+
+.NOTES
+Created:    26/10/2023
+Author:     Mark White
+Version:    0.0.1
+Updated:    
+History:    0.0.1 - Initial release
+
+#>
+[CmdletBinding()]
+PARAM ($ComputerName)
+# Computer System
+$ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ComputerName $ComputerName
+# Operating System
+$OperatingSystem = Get-CimInstance -ClassName win32_OperatingSystem -ComputerName $ComputerName
+
+# Prepare Output
+$Properties = @{
+    ComputerName = $ComputerName
+    Manufacturer = $ComputerSystem.Manufacturer
+    Model = $ComputerSystem.Model
+    OperatingSystem = $OperatingSystem.Caption
+    OperatingSystemVersion = $OperatingSystem.Version
+    SerialNumber = $Bios.SerialNumber
+}
+
+# Output Information
+New-Object -TypeName PSobject -Property $Properties
+
+}
+
+function Get-ConsoleComputerSystem {
+(Get-CimInstance -ClassName Win32_ComputerSystem).Model + " - " + (Get-CimInstance -ClassName Win32_ComputerSystem).Manufacturer
+}
+
+function Get-ConsoleCPUDetail {
+<#
+.SYNOPSIS
+Checks the CPU status
+.DESCRIPTION
+This PowerShell script queries the CPU status (name, type, speed, temperature, etc) and prints it.
+.EXAMPLE
+PS> ./check-cpu.ps1
+✅ Intel(R) Core(TM) i9-10900X CPU @ 3.70GHz (AMD64, 20 cores, CPU0, 3696MHz, CPU0 socket, 31.3°C)
+.NOTES
+
+#>
+
+function GetCPUArchitecture {
+if ("$env:PROCESSOR_ARCHITECTURE" -ne "") { return "$env:PROCESSOR_ARCHITECTURE" }
+if ($IsLinux) {
+    $Name = $PSVersionTable.OS
+    if ($Name -like "*-generic *") {
+        if ([System.Environment]::Is64BitOperatingSystem) { return "x64" } else { return "x86" }
+    } elseif ($Name -like "*-raspi *") {
+        if ([System.Environment]::Is64BitOperatingSystem) { return "ARM64" } else { return "ARM32" }
+    } elseif ([System.Environment]::Is64BitOperatingSystem) { return "64-bit" } else { return "32-bit" }
+}
+}
+
+function GetCPUTemperature {
+<#
+.SYNOPSIS
+    Checks the CPU 
+.DESCRIPTION
+    This script checks the CPU temperature.
+.EXAMPLE
+    PS> Get-CPUTemperature
+    ✔️ CPU has 30.3 °C
+.NOTES
+    Created:    26/10/2023
+    Author:     Mark White
+    Version:    0.0.1
+    Updated:    
+    History:    0.0.1 - Initial release
+#>
+try {
+    if (test-path "/sys/class/thermal/thermal_zone0/temp" -pathType leaf) {
+        [int]$IntTemp = get-content "/sys/class/thermal/thermal_zone0/temp"
+        $Temp = [math]::round($IntTemp / 1000.0, 1)
+    } else {
+        $data = Get-CimInstance -ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -Namespace "root/CIMV2"
+        $Temp = @($data)[0].HighPrecisionTemperature
+        $Temp = [math]::round($Temp / 100.0, 1)
+    }
+
+    if ($Temp -gt 80) {
+        $Reply = "$($Temp)"
+    } elseif ($Temp -gt 50) {
+        $Reply = "$($Temp)"
+    } elseif ($Temp -gt 0) {
+        $Reply = "$($Temp)"
+    } elseif ($Temp -gt -20) {
+        $Reply = "$($Temp)"
+    } else {
+        $Reply = "$($Temp)"
+    }
+    "$Reply"
+
+} catch {
+    "⚠️ Error: $($Error[0]) ($($MyInvocation.MyCommand.Name):$($_.InvocationInfo.ScriptLineNumber))"
+}
+}
+
+try {
+$arch = GetCPUArchitecture
+if ($IsLinux) {
+    $cpuName = "$arch CPU"
+    $arch = ""
+} else {
+    $details = Get-CimInstance -ClassName Win32_Processor
+    $cpuName = $details.Name.trim()
+    $arch = "$arch, "
+}
+$cores = [System.Environment]::ProcessorCount
+$celsius = GetCPUTemperature
+if ($celsius -eq 99999.9) {
+    $temp = "no temp"
+} elseif ($celsius -gt 50) {
+    $temp = "$($celsius)°C HOT"
+} elseif ($celsius -lt 0) {
+    $temp = "$($celsius)°C COLD"
+} else {
+    $temp = "$($celsius)°C OK"
+} 
+
+return "$cpuName ( $($cores) Cores ) - $temp"
+
+} catch {
+"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
+
+}
+
+}
+
+function Get-ConsoleRAM() {
+$FreeRam = ([math]::Truncate((Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory / 1KB));
+$TotalRam = ([math]::Truncate((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1MB));
+$UsedRam = $TotalRam - $FreeRam;
+$FreeRamPercent = ($FreeRam / $TotalRam) * 100;
+$FreeRamPercent = "{0:N0}" -f $FreeRamPercent;
+$UsedRamPercent = ($UsedRam / $TotalRam) * 100;
+$UsedRamPercent = "{0:N0}" -f $UsedRamPercent;
+return $UsedRam.ToString() + " MB " + "(" + $UsedRamPercent.ToString() + "%" + ")" + " / " + $TotalRam.ToString() + " MB ";
+}
+
+function Get-ConsoleOSDetails {
+<#
+.SYNOPSIS
+Checks the OS status
+.DESCRIPTION
+This PowerShell script queries the operating system status and prints it.
+.EXAMPLE
+PS> Get-OSDetails
+✅ Windows 10 Pro 64-bit (v10.0.19045, since 6/22/2021, S/N 00123-45678-15135-AAOEM, P/K AB123-CD456-EF789-GH000-WFR6P)
+.NOTES
+Created:    04/01/2024
+Author:     Mark White
+Version:    0.0.1
+Updated:    
+History:    0.0.1 - Initial release
+#>
+
+try {
+if ($IsLinux) {
+    $Name = $PSVersionTable.OS
+    if ([System.Environment]::Is64BitOperatingSystem) { $Arch = "64-bit" } else { $Arch = "32-bit" }
+    return "$Name (Linux $Arch)"
+} else {
+    $OS = Get-CimInstance -ClassName Win32_OperatingSystem
+    $Name = $OS.Caption -Replace "Microsoft Windows","Windows"
+    $Arch = $OS.OSArchitecture
+    $Version = $OS.Version
+
+    [system.threading.thread]::currentthread.currentculture = [system.globalization.cultureinfo]"en-GB"
+    $OSDetails = Get-CimInstance Win32_OperatingSystem
+
+    return "$Name $Arch ( v$Version )"
+} 
+
+} catch {
+"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
+
+}
+}
+
+function Get-ConsoleDisplays() {
+if ($env:COMPUTERNAME -eq "labCLI01") {
+    "Displays Not Supported"
 }
 else {
-    $PSConsole_PSVersion = "$($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor).$($PSVersionTable.PSVersion.Build).$($PSVersionTable.PSVersion.Revision)"
+$Displays = New-Object System.Collections.Generic.List[System.Object];
+
+# This gives the available resolutions
+$monitors = Get-CimInstance -N "root\wmi" -ClassName WmiMonitorListedSupportedSourceModes
+
+foreach ($monitor in $monitors)
+{
+    # Sort the available modes by display area (width*height)
+    $sortedResolutions = $monitor.MonitorSourceModes | Sort-Object -property { $_.HorizontalActivePixels * $_.VerticalActivePixels }
+    $maxResolutions = $sortedResolutions | Select-Object @{ N = "MaxRes"; E = { "$($_.HorizontalActivePixels) x $($_.VerticalActivePixels) " } }
+    
+    $Displays.Add(($maxResolutions | Select-Object -last 1).MaxRes);
 }
 
-# Get host uptime
-function Get-ConsoleUptime() {
-    $Uptime = (((Get-CimInstance -ClassName Win32_OperatingSystem).LocalDateTime) - ((Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime));
-	
-    $FormattedUptime = $Uptime.Days.ToString() + "d " + $Uptime.Hours.ToString() + "h " + $Uptime.Minutes.ToString() + "m " + $Uptime.Seconds.ToString() + "s ";
-    return $FormattedUptime;
+return $Displays;
+}
 }
 
-# Get computer make & model
-function Get-ConsoleComputerSystem {
-    (Get-CimInstance -ClassName Win32_ComputerSystem).Manufacturer + " - " + (Get-CimInstance -ClassName Win32_ComputerSystem).Model
+function Get-ConsoleGreeting {
+
+
+$Hour = (Get-Date).Hour
+If ( $Hour -lt 7 ) { "You're Working Early - $dn" }
+elseif ( $Hour -lt 12 ) { "Good Morning - $dn" }
+elseif ( $Hour -lt 16 ) { "Good Afternoon - $dn" }
+elseif ( $Hour -lt 19 ) { "Good Evening - $dn" }
+elseif ( $Hour -gt 20 ) { "What the hell are you still doing here? - $dn" }
+else { "Good Afternoon - $dn" }
 }
 
-# Get computer processor
-function Get-ConsoleCPU {
-	(Get-CimInstance -ClassName Win32_Processor).Name
-}
+function Get-ConsoleLastBootUpTime {
 
-# Get computer processor count
-function Get-ConsoleCPUCount {
-	(Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors
-}
+[CmdletBinding()]
+param(
+    [parameter(ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+    [string]$ComputerName,
+    
+    [System.Management.Automation.PSCredential]
+    $Credential
+)
 
-# Get computer RAM Usage
-function Get-ConsoleRAM() {
-    $FreeRam = ([math]::Truncate((Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory / 1KB));
-    $TotalRam = ([math]::Truncate((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1MB));
-    $UsedRam = $TotalRam - $FreeRam;
-    $FreeRamPercent = ($FreeRam / $TotalRam) * 100;
-    $FreeRamPercent = "{0:N0}" -f $FreeRamPercent;
-    $UsedRamPercent = ($UsedRam / $TotalRam) * 100;
-    $UsedRamPercent = "{0:N0}" -f $UsedRamPercent;
-    return $UsedRam.ToString() + " MB " + "(" + $UsedRamPercent.ToString() + "%" + ")" + " / " + $TotalRam.ToString() + " MB ";
-}
+begin {
+    function Out-Object {
+        param(
+            [System.Collections.Hashtable[]] $hashData
+        )
 
-# Get Computer Operating System Version
-function Get-ConsoleOSVersion {
-	(Get-CimInstance -ClassName Win32_OperatingSystem).Caption + " " + (Get-CimInstance -ClassName Win32_OperatingSystem).OSArchitecture	
-}
-
-# Get OS Kernel Version
-function Get-ConsoleKernel() {
-	return (Get-CimInstance -ClassName  Win32_OperatingSystem).Version;
-}
-
-# Get Computer Displays
-function Get-ConsoleDisplays() {
-	if ($env:COMPUTERNAME -eq "labCLI01") {
-        "Displays Not Supported"
+        $order = @()
+        $result = @{ }
+        $hashData | ForEach-Object {
+            $order += ($_.Keys -as [Array])[0]
+            $result += $_
+        }
+        New-Object PSObject -Property $result | Select-Object $order
     }
-    else {
-	$Displays = New-Object System.Collections.Generic.List[System.Object];
-	
-	# This gives the available resolutions
-	$monitors = Get-CimInstance -N "root\wmi" -ClassName WmiMonitorListedSupportedSourceModes
-	
-	foreach ($monitor in $monitors)
-	{
-		# Sort the available modes by display area (width*height)
-		$sortedResolutions = $monitor.MonitorSourceModes | Sort-Object -property { $_.HorizontalActivePixels * $_.VerticalActivePixels }
-		$maxResolutions = $sortedResolutions | Select-Object @{ N = "MaxRes"; E = { "$($_.HorizontalActivePixels) x $($_.VerticalActivePixels) " } }
-		
-		$Displays.Add(($maxResolutions | Select-Object -last 1).MaxRes);
-	}
-	
-	return $Displays;
+
+    function Format-TimeSpan {
+        process {
+            "{0:00}D {1:00}H {2:00}M {3:00}S" -f $_.Days, $_.Hours, $_.Minutes, $_.Seconds
+        }
+    }
+
+    function Get-InnerUptime {
+        param(
+            $ComputerName,
+            $Credential # -> # PSScriptAnalyzerTipp: must not use SecureString
+        )
+
+        # In case pipeline input contains ComputerName property
+        if ($computerName.ComputerName) {
+            $computerName = $computerName.ComputerName
+        }
+
+        if ((-not $computerName) -or ($computerName -eq ".")) {
+            $computerName = [Net.Dns]::GetHostName()
+        }
+
+        $params = @{
+            "Class"        = "Win32_OperatingSystem"
+            "ComputerName" = $computerName
+            "Namespace"    = "root\CIMV2"
+        }
+
+        if ( $credential ) {
+            # Ignore -Credential for current computer
+            if ($computerName -ne [Net.Dns]::GetHostName()) {
+                $params.Add("Credential", $credential)
+            }
+        }
+
+        try {
+            $wmiOS = Get-WmiObject @params -ErrorAction Stop
+        } catch {
+            Write-Error -Exception (New-Object $_.Exception.GetType().FullName `
+                ("Cannot connect to the computer '$computerName' due to the following error: '$($_.Exception.Message)'",
+                    $_.Exception))
+            return
+        }
+
+        $lastBootTime = [Management.ManagementDateTimeConverter]::ToDateTime($wmiOS.LastBootUpTime)
+        Out-Object `
+        @{"ComputerName" = $computerName},
+        @{"LastBootTime" = $lastBootTime},
+        @{"Uptime" = (Get-Date) - $lastBootTime | Format-TimeSpan}
     }
 }
 
-# Get time until Xmas
-function Get-TimeToHoliday {
-    <#
-	.SYNOPSIS
-		Checks the time until holiday
-	.DESCRIPTION
-		This script checks the time until holiday and replies by text-to-speech (TTS).
-	.EXAMPLE
-		PS> Get-TimeToholiday
-	.NOTES
-		Created:    26/10/2023
-		Author:     Mark White
-		Version:    0.0.1
-		Updated:    
-		History:    0.0.1 - Initial release
+process {
+    if ($ComputerName) {
+        foreach ($computerNameItem in $ComputerName) {
+            Get-InnerUptime $computerNameItem $Credential
+        }
+    } else {
+        Get-InnerUptime "."
+    }
+}
+
+#Get-Date -Format dd.MM.yyyy | Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object LastBootUpTime 
+
+}
+
+function Get-ConsolePowerDetails {
+<#
+.SYNOPSIS
+Checks the power status
+.DESCRIPTION
+This PowerShell script queries the power status and prints it.
+.EXAMPLE
+PS> Get-ConsolePowerDetails
+⚠️ Battery at 9% · 54 min remaining · power scheme 'HP Optimized' 
+.NOTES
+Created:    04/01/2024
+Author:     Mark White
+Version:    0.0.1
+Updated:    
+History:    0.0.1 - Initial release
 #>
-    try {
-        $Now = Get-Date
-        $holiday = Get-Date -Month 01 -Day 09 -Year 2025
-		$daysUntilholiday = ($holiday - $Now).Days
 
-        $Reply = "$daysUntilholiday days until Bali & Lombock."
-        "$Reply"
+try {
+if ($IsLinux) {
+    $reply = "✅ AC Powered"
+} else {
+    Add-Type -Assembly System.Windows.Forms
+    $details = [System.Windows.Forms.SystemInformation]::PowerStatus
+    [int]$percent = 100 * $details.BatteryLifePercent
+    [int]$remaining = $details.BatteryLifeRemaining / 60
+    if ($details.PowerLineStatus -eq "Online") {
+        if ($details.BatteryChargeStatus -eq "NoSystemBattery") {
+            $reply = "AC Powered"
+        } elseif ($percent -ge 95) {
+            $reply = "Battery $percent% Fully Charged"
+        } else {
+            $reply = "Battery ($percent%)"
+        }
+    } else { # must be offline
+        if (($remaining -eq 0) -and ($percent -ge 60)) {
+            $reply = "Battery $percent% full"
+        } elseif ($remaining -eq 0) {
+            $reply = "Battery at $percent%"
+        } elseif ($remaining -le 5) {
+            $reply = "Battery at $percent% · ONLY $($remaining)min remaining"
+        } elseif ($remaining -le 30) {
+            $reply = "Battery at $percent% · only $($remaining)min remaining"
+        } elseif ($percent -lt 10) {
+            $reply = "Battery at $percent% · $($remaining)min remaining"
+        } elseif ($percent -ge 60) {
+            $reply = "Battery $percent% full · $($remaining)min remaining"
+        } else {
+            $reply = "Battery at $percent% · $($remaining)min remaining"
+        }
+    }
+    $powerScheme = (powercfg /getactivescheme)
+    $powerScheme = $powerScheme -Replace "^(.*)  \(",""
+    $powerScheme = $powerScheme -Replace "\)$",""
+    $reply += " / Power Scheme '$powerScheme'"
+}
+Write-Output $reply
+
+} catch {
+"⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
+
+}
+}
+
+function Get-ConsoleDriveStat {
+<#
+.SYNOPSIS
+    To get statistics on drives on a particular server or servers.
+.DESCRIPTION
+    To get statistics on drives on a server including Size, FreeSpace, and FreePct. Command line
+    parameter allows for capacity statistics in Bytes, KB, MB, and GB
+.NOTES
+    Created:    26/10/2023
+    Author:     Mark White
+    Version:    0.0.1
+    Updated:    
+    History:    0.0.1 - Initial release
+.EXAMPLE
+    Get-DriveStat
+
+    ComputerName DeviceID VolumeName SizeGB FreeSpaceGB FreePct
+    ------------ -------- ---------- ------ ----------- -------
+    localhost    C:       Windows    237.14       19.56    8.25
+.EXAMPLE
+    Get-DriveStat -Capacity MB
+
+    ComputerName DeviceID VolumeName    SizeMB FreeSpaceMB FreePct
+    ------------ -------- ----------    ------ ----------- -------
+    localhost    C:       Windows    242831.45    20026.65    8.25
+.EXAMPLE
+    Get-DriveStat -Verbose
+
+    VERBOSE: Starting Get-DriveStat
+    VERBOSE: Capacity will be expressed in [GB]
+    VERBOSE: Processing MDA-102192
+
+    ComputerName : localhost
+    DeviceID     : C:
+    VolumeName   : Windows
+    SizeGB       : 237.14
+    FreeSpaceGB  : 19.56
+    FreePct      : 8.25
+
+    VERBOSE: Ending Get-DriveStat
+
+#>
+[CmdletBinding()]
+[OutputType('psobject')]
+Param (
+    [Parameter(Position = 0)]
+    [ValidateNotNullorEmpty()]
+    [Alias('CN', 'Server', 'ServerName', 'PSComputerName', 'SystemName')]
+    [string[]] $ComputerName = $env:COMPUTERNAME,
+
+    [Parameter(Position = 1, HelpMessage = "GB is selected by default")]
+    [ValidateSet('Bytes', 'KB', 'MB', 'GB')]
+    [string] $Capacity = 'GB'
+
+)
+
+
+    begin {
+        Write-Verbose -Message "Starting [$($MyInvocation.Mycommand)]"
+        Write-Verbose -Message "Capacity will be expressed in [$Capacity]"
+        $Query = "Select * from Win32_LogicalDisk where DriveType='3' and FileSystem='NTFS'"
+    }
+
+    process {
+        foreach ($C in $ComputerName) {
+            Write-Verbose -Message "Processing $c"
+            $DriveStat = Get-WMIObject -Query $Query -ComputerName $C
+            switch ($Capacity) {
+                'Bytes' {
+                    $DriveStat |
+                    Select-Object -Property @{name = 'ComputerName'; expression = { $_.SystemName } },
+                    DeviceID,
+                    VolumeName,
+                    Size,
+                    FreeSpace,
+                    @{name = 'FreePct'; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / $_.Size * 100)) } }
+                }
+
+                'KB' {
+                    $DriveStat |
+                    Select-Object -Property @{name = 'ComputerName'; expression = { $_.SystemName } },
+                    DeviceID,
+                    VolumeName,
+                    @{name = 'SizeKB'     ; expression = { [double] ('{0:f2}' -f ($_.Size / 1KB)) } },
+                    @{name = 'FreeSpaceKB'; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / 1KB)) } },
+                    @{name = 'FreePct'    ; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / $_.Size * 100)) } }
+                }
+
+                'MB' {
+                    $DriveStat |
+                    Select-Object -Property @{name = 'ComputerName'; expression = { $_.SystemName } },
+                    DeviceID,
+                    VolumeName,
+                    @{name = 'SizeMB'     ; expression = { [double] ('{0:f2}' -f ($_.Size / 1MB)) } },
+                    @{name = 'FreeSpaceMB'; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / 1MB)) } },
+                    @{name = 'FreePct'    ; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / $_.Size * 100)) } }
+                }
+
+                'GB' {
+                    $DriveStat |
+                    Select-Object -Property @{name = 'ComputerName'; expression = { $_.SystemName } },
+                    DeviceID,
+                    VolumeName,
+                    @{name = 'SizeGB'     ; expression = { [double] ('{0:f2}' -f ($_.Size / 1GB)) } },
+                    @{name = 'FreeSpaceGB'; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / 1GB)) } },
+                    @{name = 'FreePct'    ; expression = { [double] ('{0:f2}' -f ($_.FreeSpace / $_.Size * 100)) } }
+                }
+            }
+        }
 
     }
-    catch {
-        "⚠️ Error: $($Error[0]) ($($MyInvocation.MyCommand.Name):$($_.InvocationInfo.ScriptLineNumber))"
 
+    end {
+        Write-Verbose -Message "Ending [$($MyInvocation.Mycommand)]"
     }
+}
+
+function Get-ConsoleAdminRightsStatus {
+<#
+.SYNOPSIS
+    Check for admin rights
+.DESCRIPTION
+    This PowerShell script checks if the user has administrator rights.
+.EXAMPLE
+    PS> ./check-admin.ps1
+    ✅ Yes, John has admin rights.
+.NOTES
+
+#>
+
+try {
+if ($IsLinux) {
+    # todo
+} else {
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = (New-Object Security.Principal.WindowsPrincipal $user)
+    if ($principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+        "Yes, $dn has Admin Rights."
+    } elseif ($principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Guest)) {
+        "No, $dn, has Guest Rights Only."
+    } else {
+        "No, $dn has Normal User Rights Only."
+    }
+}  
+
+} catch {
+"⚠️ Error: $($Error[0]) (in script line $($_.InvocationInfo.ScriptLineNumber))"
+
+}	
+}
+
+function Get-ConsoleTimetoXmas {
+<#
+.SYNOPSIS
+    Checks the time until Xmas
+.DESCRIPTION
+    This PowerShell script checks the time until Xmas and replies by text-to-speech (TTS).
+.EXAMPLE
+    PS> Get-TimetoXmas
+.NOTES
+    Created:    04/01/2024
+    Author:     Mark White
+    Version:    0.0.1
+    Updated:    
+    History:    0.0.1 - Initial release
+#>
+
+try {
+    $Now = [DateTime]::Now
+    $NewYear = [Datetime]("12/25/" + $Now.Year)
+    $Days = ($NewYear - $Now).Days + 1
+    if ($Days -gt 1) {
+        Write-Host "Xmas is in $Days days."
+    } elseif ($Days -eq 1) {
+        Write-Host "Xmas is tomorrow."
+    }
+} catch {
+    "⚠️ Error in line $($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
+}
 }
 
 $PSConsole_IPv4Address = (Get-ConsoleIPv4Address).IPAddress
 $PSConsole_IPv4Prefix = (Get-ConsoleIPv4Address).PrefixLength
-$PSConsole_Uptime = Get-ConsoleUptime
 $PSConsole_ComputerSystem = Get-ConsoleComputerSystem
-$PSConsole_Processor = Get-ConsoleCPU
-$PSConsole_ProcessorCount = Get-ConsoleCPUCount
+$PSConsole_CPUDetails = Get-ConsoleCPUDetail
+$PSConsole_PSVersion = Get-ConsolePSStatus
 $PSConsole_RAM = Get-ConsoleRAM
-$PSConsole_OSVersion = Get-ConsoleOSVersion
-$PSConsole_Kernel = Get-ConsoleKernel
 $PSConsole_Displays = Get-ConsoleDisplays
+$PSConsole_ExecPolicy = Get-ExecutionPolicy
+$PSConsole_Greeting = Get-ConsoleGreeting
+$PSConsole_Uptime = (Get-ConsoleLastBootUpTime).UpTime
+$PSConsole_LastBootUpTime = (Get-ConsoleLastBootUpTime).LastBootTime
+$PSConsole_PowerDetails = Get-ConsolePowerDetails
+$PSConsole_DriveStatFree = (Get-ConsoleDriveStat).FreeSpaceGB
+$PSConsole_DriveStatPct = (Get-ConsoleDriveStat).FreePct
+$PSConsole_AdminRights = Get-ConsoleAdminRightsStatus
+$PSConsole_OSDetails = Get-ConsoleOSDetails
+
 $PSConsole_TimeToHoliday = Get-TimeToHoliday
 
 # Setup Console Window
 $Shell = $Host.UI.RawUI
 $Shell.WindowTitle = "Windows PowerShell $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)" + $AdminTitle
 
+<#
+
+On surface
 $Size = $Shell.WindowSize
 $Size.width = 200
 $Size.height = 65
@@ -735,49 +822,124 @@ $Shell.WindowSize = $Size
 
 $Size = $Shell.BufferSize
 $Size.width = 200
-$Size.height = 5000
+$Size.height = 500
 $Shell.BufferSize = $Size
 
+On laptop
+$Size = $Shell.WindowSize
+$Size.width = 175
+$Size.height = 50
+$Shell.WindowSize = $Size
+
+$Size = $Shell.BufferSize
+$Size.width = 175
+$Size.height = 500
+$Shell.BufferSize = $Size
+
+On home laptop
+$Size = $Shell.WindowSize
+$Size.width = 200
+$Size.height = 65
+$Shell.WindowSize = $Size
+
+$Size = $Shell.BufferSize
+$Size.width = 200
+$Size.height = 500
+$Shell.BufferSize = $Size
+
+#>
+
+If ($env:COMPUTERNAME.Equals(($WorkDevice)))
+{
+$Size = $Shell.WindowSize
+$Size.width = 200
+$Size.height = 65
+$Shell.WindowSize = $Size
+
+$Size = $Shell.BufferSize
+$Size.width = 200
+$Size.height = 500
+$Shell.BufferSize = $Size
+}
+ElseIf ($env:COMPUTERNAME.Equals(($HomeLP)))
+{
+$Size = $Shell.WindowSize
+$Size.width = 175
+$Size.height = 50
+$Shell.WindowSize = $Size
+
+$Size = $Shell.BufferSize
+$Size.width = 175
+$Size.height = 500
+$Shell.BufferSize = $Size
+}
+ElseIf ($env:COMPUTERNAME.Equals(($HomePC)))
+{
+$Size = $Shell.WindowSize
+$Size.width = 200
+$Size.height = 65
+$Shell.WindowSize = $Size
+
+$Size = $Shell.BufferSize
+$Size.width = 200
+$Size.height = 500
+$Shell.BufferSize = $Size
+}
+<#
+Hidden from script as used in If statement above
+$Size = $Shell.WindowSize
+$Size.width = 200
+$Size.height = 65
+$Shell.WindowSize = $Size
+
+$Size = $Shell.BufferSize
+$Size.width = 200
+$Size.height = 500
+$Shell.BufferSize = $Size
+#>
 $Shell.BackgroundColor = "Black"
 $Shell.ForegroundColor = "White"
 if ($isAdmin) {
-    $Shell.BackgroundColor = "Black"
-    $Shell.ForegroundColor = "Gray"
+$Shell.BackgroundColor = "Black"
+$Shell.ForegroundColor = "Gray"
 }
 
 # Startscreen / Clear-Host Text
 function Write-StartScreen {
 
-    $EmptyConsoleText = @"
-                                                         ____                        ____  _          _ _     
-     SS                                                 |  _ \ _____      _____ _ __/ ___|| |__   ___| | |    
-     SSSSS                                              | |_) / _ \ \ /\ / / _ \ '__\___ \| '_ \ / _ \ | |    
-     SSSSSSSS                                           |  __/ (_) \ V  V /  __/ |   ___) | | | |  __/ | |    
-     SSSSSSSSSSS                                        |_|   \___/ \_/\_/ \___|_|  |____/|_| |_|\___|_|_|    
-        SSSSSSSSSSS                                                                             
-           SSSSSSSSSSS              +=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=+
-           SSSSSSSSSSS              |
-              SSSSSSSSSSS           |       Date & Time                     :       $(Get-Date -Format F)
-                SSSSSSSSSSS         |       Domain\Username                 :       $env:USERDOMAIN \ $env:USERNAME
-                SSSSSSSSSSS         |       Hostname                        :       $env:COMPUTERNAME
-                SSSSSSSSSSS         |       Make & Model                    :       $PSConsole_ComputerSystem
-                SSSSSSSSSSS         |       Displays                        :       $PSConsole_Displays
-                SSSSSSSSSSS         |       Uptime                          :       $PSConsole_Uptime
-                SSSSSSSSSSS         |       CPU & Cores                     :       $PSConsole_Processor / $PSConsole_ProcessorCount
-                SSSSSSSSSSS         |       Memory                          :       $PSConsole_RAM
-              SSSSSSSSSSS           |       IPv4-Address                    :       $PSConsole_IPv4Address / $PSConsole_IPv4Prefix
-           SSSSSSSSSSS              |       Shell Version                   :       $PSConsole_PSVersion
-        SSSSSSSSSSS                 |       OS Version & Kernel Version     :       $PSConsole_OSVersion / $PSConsole_Kernel
-     SSSSSSSSSSS                    |       
-     SSSSSSSSS                      |       My next holiday is in           >       $PSConsole_TimeToHoliday
-     SSSSSSSS                       |
-     SSSSS      SSSSSSSSSSSSSSS     +=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=+
-     SSS      SSSSSSSSSSSSSSS                                                                    [ Mark.White@DualTek.Wales ] 
-                                                                                
+$EmptyConsoleText = @"
+                            ____                        ____  _          _ _     
+                            |  _ \ _____      _____ _ __/ ___|| |__   ___| | |    
+                            | |_) / _ \ \ /\ / / _ \ '__\___ \| '_ \ / _ \ | |    
+                            |  __/ (_) \ V  V /  __/ |   ___) | | | |  __/ | |    
+                            |_|   \___/ \_/\_/ \___|_|  |____/|_| |_|\___|_|_|    
+
++=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=+
+|
+|       Greeting                        :       $PSConsole_Greeting
+|       Date & Time                     :       $(Get-Date -Format F)
+|       Domain\Username                 :       $env:USERDOMAIN \ $env:USERNAME
+|       Hostname                        :       $env:COMPUTERNAME
+|       Make & Model                    :       $PSConsole_ComputerSystem
+|       Operating System Details        :       $PSConsole_OSDetails
+|       Drive Space Info                :       Free: $PSConsole_DriveStatFree GB / $PSConsole_DriveStatPct %
+|       Memory                          :       $PSConsole_RAM
+|       Power Details                   :       $PSConsole_PowerDetails
+|       Displays                        :       $PSConsole_Displays
+|       Uptime                          :       $PSConsole_Uptime / $PSConsole_LastBootUpTime
+|       CPU Information                 :       $PSConsole_CPUDetails
+|       IPv4-Address                    :       $PSConsole_IPv4Address / $PSConsole_IPv4Prefix
+|       PowerShell Version              :       $PSConsole_PSVersion
+|       Execution Policy                :       $PSConsole_ExecPolicy
+|       Console Admin Status            :       $PSConsole_AdminRights
+|       
+|       My next holiday is in           >       $PSConsole_TimeToHoliday
+|
++=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=+
 
 "@
 
-    Write-Host -Object $EmptyConsoleText
+Write-Host -Object $EmptyConsoleText
 }
 
 # Overwrite default function "Clear-Host"
