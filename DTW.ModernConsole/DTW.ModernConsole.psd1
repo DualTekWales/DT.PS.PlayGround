@@ -2,13 +2,13 @@
 @{
 	
 	# Script module or binary module file associated with this manifest
-	RootModule = 'DTW.PSConsole.psm1'
+	RootModule = 'DTW.ModernConsole.psm1'
 	
 	# Version number of this module.
 	ModuleVersion = '1.0.1'
 	
 	# ID used to uniquely identify this module
-	GUID = '0e222769-859d-4587-adba-fab5b7ff7368'
+	GUID = '318b7d9c-ce5d-4e35-ac5a-7afc304ce1f5'
 	
 	# Author of this module
 	Author = 'Mark White'
